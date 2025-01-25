@@ -1,33 +1,9 @@
 import os
-import pytesseract as tess
-from pdf2image import convert_from_path
-from summary import generate_summary  # Import the summarization function
-from preprocessing import preprocess_and_save_text  # Import the updated preprocessing function
-import subprocess
 import streamlit as st
-
-# Set the Tesseract command path
-tess.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-
-def read_pdf(file):
-    pages = []
-
-    try:
-        # Convert the PDF file to a list of PIL images
-        images = convert_from_path(file)
-
-        # Extract text from each image
-        for i, image in enumerate(images):
-            # Extract text from each image using pytesseract
-            text = tess.image_to_string(image)
-            pages.append(text)  # Append extracted text to pages list
-
-    except Exception as e:
-        st.error(f"Error processing the PDF: {str(e)}")
-        return ""
-
-    # Return the combined extracted text
-    return "\n".join(pages)
+import subprocess
+from text_extraction import read_pdf  # Import the extraction function
+from summary import generate_summary  # Import summarization function
+from preprocessing import preprocess_and_save_text  # Import preprocessing function
 
 def main():
     # Streamlit app layout
@@ -44,41 +20,41 @@ def main():
             f.write(uploaded_file.getbuffer())
 
         # Step 2: Read and extract text from the PDF
-        extracted_text = read_pdf(pdf_path)
+        try:
+            extracted_text = read_pdf(pdf_path)  # Call the function from text_extraction.py
 
-        if extracted_text:
-            # Step 3: Preprocess the extracted text and save to a file
-            preprocessed_file_path = os.path.splitext(pdf_path)[0] + "_preprocessed.txt"
-            preprocess_and_save_text(extracted_text, preprocessed_file_path)
+            if extracted_text:
+                # Step 3: Preprocess and save extracted text
+                preprocessed_file_path = os.path.splitext(pdf_path)[0] + "_preprocessed.txt"
+                preprocess_and_save_text(extracted_text, preprocessed_file_path)
 
-            st.success(f"Preprocessed text saved to: {preprocessed_file_path}")
+                st.success(f"Preprocessed text saved to: {preprocessed_file_path}")
 
-            # Step 4: Ask user for classification or summarization
-            choice = st.radio("Choose an option:", ("Classify the text", "Summarize the text"))
+                # Step 4: Ask user to choose between classification or summarization
+                choice = st.radio("Choose an option:", ("Classify the text", "Summarize the text"))
 
-            if choice == "Classify the text":
-                # Get the absolute path of the current script's directory
-                current_dir = os.path.dirname(os.path.abspath(__file__))
+                if choice == "Classify the text":
+                    # Step 5: Run the classification script and capture output
+                    result = subprocess.run(
+                        ["python", "model_test.py", preprocessed_file_path],
+                        capture_output=True, text=True
+                    )
 
-                # Build the absolute path to model_test.py
-                model_test_path = os.path.join(current_dir, "model_test.py")
+                    # Display the classification output in Streamlit
+                    if result.returncode == 0:
+                        st.success("Classification completed successfully.")
+                        st.write("*Classification Output:*")
+                        st.code(result.stdout)  # Display the output as code block
+                    else:
+                        st.error(f"Error during classification:\n{result.stderr}")
 
-                # Run model_test.py with the preprocessed file path
-                result = subprocess.run(
-                    ["python", model_test_path, preprocessed_file_path],
-                    capture_output=True,
-                    text=True
-                )
-                st.success("Classification completed.")
-                if result.stdout:
-                    st.write(f"**Classification Result:** {result.stdout}")
-                if result.stderr:
-                    st.error(f"Error during classification: {result.stderr}")
+                elif choice == "Summarize the text":
+                    # Generate summary of the original text
+                    summary = generate_summary(pdf_path)  # Use extracted text
+                    st.write(f"Summary:\n{summary}")
 
-            elif choice == "Summarize the text":
-                # Summarize the original extracted text using the generate_summary function
-                summary = generate_summary(pdf_path)  # Use the original PDF path for summarization
-                st.write(f"Summary:\n{summary}")
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    main()
