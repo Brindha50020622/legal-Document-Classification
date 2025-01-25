@@ -3,3 +3,5 @@ pytesseract
 pdf2image
 PyMuPDF
 torch  
+transformers
+fitz
